@@ -1,4 +1,4 @@
-"""在 Qt 文本文档里渲染 Markdown 与 LaTeX，无需浏览器。"""
+"""在 Qt 文本文档中解析 Markdown，并渲染行内和独立的 LaTeX 公式。"""
 from functools import lru_cache
 from hashlib import sha256
 import re

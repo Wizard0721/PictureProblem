@@ -1,0 +1,10 @@
+/config.json
+*.exe
+*.exe.previous
+*.lnk
+__pycache__/
+*.py[cod]
+/.venv/
+/build/
+/dist/
+/.pictureproblem-update-*.tmp

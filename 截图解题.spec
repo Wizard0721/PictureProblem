@@ -1,6 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 # PyInstaller 单文件配置，包含托盘程序入口、图标、公式字体及语音依赖。
 
+from pathlib import Path
+import re
+
 from PyInstaller.utils.hooks import collect_data_files
 
 a = Analysis(
@@ -20,6 +23,14 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
+# Qt 使用 Windows 自带的 ICU。若构建机的 PATH 中有其他软件的同名
+# 库，PyInstaller 可能将其打包，从而在加载 QtCore 时覆盖系统版本。
+a.binaries = [
+    item for item in a.binaries
+    if not re.fullmatch(r"icuuc\.dll|icudt\d+\.dll", Path(item[0]).name, re.IGNORECASE)
+]
+
 pyz = PYZ(a.pure)
 
 exe = EXE(

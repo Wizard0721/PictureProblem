@@ -2,6 +2,8 @@
 
 截图解题是一个 Windows 托盘工具。按快捷键框选屏幕区域，程序调用 DeepSeek 识别截图并回答。回答支持 Markdown 和 LaTeX，可以在同一张截图下继续追问。
 
+Windows x64 用户可直接运行发布的 EXE；从源码运行时需要安装 Python 依赖。
+
 ## 使用
 
 1. 从 [Releases](https://github.com/Wizard0721/PictureProblem/releases) 下载 Windows 可执行文件，放在可写目录中运行。

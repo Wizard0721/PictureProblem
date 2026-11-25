@@ -1,6 +1,6 @@
 # 文件索引
 
-下表按文件列出项目各部分的职责，最后说明 Windows 下载附件和本机生成的文件。
+下表按文件说明项目各部分的职责，包括可直接运行的 Windows EXE 和源码所需的依赖。
 
 ## 仓库根目录
 
@@ -19,18 +19,19 @@
 | [config.py](config.py) | 定义默认设置，读写程序旁边的本机配置。 |
 | [autostart.py](autostart.py) | 读取或修改截图解题的 Windows 开机启动项。 |
 | [requirements.txt](requirements.txt) | 列出运行源码需要安装的 Python 依赖。 |
+| [PictureProblem-Windows-x64.exe](PictureProblem-Windows-x64.exe) | 内置运行库的 Windows x64 程序，可直接下载运行。 |
 | [截图解题.spec](截图解题.spec) | 指定 PyInstaller 的入口、资源和依赖，用于构建无需安装 Python 的 Windows EXE。 |
 | [hook-webrtcvad.py](hook-webrtcvad.py) | 让 PyInstaller 收录 WebRTC 人声检测库运行所需的包元数据。 |
 | [icon.ico](icon.ico) | Windows 可执行文件使用的程序图标。 |
 
-## 发布附件和本机文件
+## 本机文件
 
 | 文件 | 用途 |
 | --- | --- |
-| `PictureProblem-Windows-x64.exe` | GitHub Releases 提供的 Windows x64 下载文件；本地打包产物名为 `截图解题.exe`。 |
+| `截图解题.exe` | 在本机打包生成的 Windows 程序；仓库里的下载版文件名为 `PictureProblem-Windows-x64.exe`。 |
 | `config.json` | 用户保存设置后生成的本机配置，含自己的 DeepSeek API 密钥和偏好，不上传。 |
 | `截图解题.lnk` | 指向本机程序路径的 Windows 快捷方式，不上传。 |
 | `截图解题.exe.previous` | 更新程序时留下的旧版备份，可在退出旧版后删除，不上传。 |
 | `__pycache__/` | Python 运行源码时生成的字节码缓存，不上传。 |
 | `build/` | PyInstaller 打包时生成的临时文件，不上传。 |
-| `dist/` | PyInstaller 默认输出目录；其中的成品 EXE 作为发布附件单独上传。 |
+| `dist/` | PyInstaller 默认写入成品 EXE 的目录。 |

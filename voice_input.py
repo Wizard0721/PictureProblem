@@ -1,4 +1,4 @@
-"""截图框选期间的麦克风采集，以及上传前的人声检测。"""
+"""在框选期间采集麦克风音频，检测人声后在内存中封装 WAV。"""
 from array import array
 from collections import deque
 from dataclasses import dataclass

@@ -1,6 +1,7 @@
-# Git 忽略本机配置及构建文件；Windows EXE 在 GitHub Releases 单独发布。
+# 跟踪供下载的 Windows EXE，忽略本机配置和其余构建文件。
 /config.json
 *.exe
+!/PictureProblem-Windows-x64.exe
 *.exe.previous
 *.lnk
 __pycache__/

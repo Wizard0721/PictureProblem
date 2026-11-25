@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+# PyInstaller 单文件配置，包含托盘程序入口、图标、公式字体及语音依赖。
 
 from PyInstaller.utils.hooks import collect_data_files
 

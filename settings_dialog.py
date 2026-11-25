@@ -1,4 +1,4 @@
-"""设置窗口：配置 API、联网搜索和处理模式。"""
+"""设置密钥和快捷键，切换联网搜索、语音输入、思考模式及自定义处理模式。"""
 from uuid import uuid4
 
 from PySide6.QtCore import Signal

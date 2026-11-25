@@ -1,4 +1,4 @@
-"""调用 DeepSeek 的语音转写、联网搜索和图片问答接口。"""
+"""调用 DeepSeek 的语音转写、联网搜索和截图问答接口，拼接对话并读取流式输出。"""
 import base64
 import json
 

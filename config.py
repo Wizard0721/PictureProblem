@@ -1,4 +1,4 @@
-"""本地配置的读取和保存。开发时存在代码目录，打包成 exe 后存在 exe 旁边。"""
+"""定义默认设置，并读写源码或 EXE 同目录的本机 config.json。"""
 import json
 import os
 import sys

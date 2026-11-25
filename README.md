@@ -2,13 +2,15 @@
 
 截图解题是一个 Windows 托盘工具。按快捷键框选屏幕区域，程序调用 DeepSeek 识别截图并回答。回答支持 Markdown 和 LaTeX，可以在同一张截图下继续追问。
 
-Windows x64 用户可直接运行发布的 EXE；从源码运行时需要安装 Python 依赖。
+**[直接下载 Windows x64 EXE](https://github.com/Wizard0721/PictureProblem/raw/refs/heads/main/PictureProblem-Windows-x64.exe)**。安装 Python 只在从源码运行时需要。
 
 ## 使用
 
-1. 从 [Releases](https://github.com/Wizard0721/PictureProblem/releases) 下载 Windows 可执行文件，放在可写目录中运行。
+1. 下载仓库根目录里的 `PictureProblem-Windows-x64.exe`，放在可写目录中运行。EXE 已内置运行库，无需单独安装 Python 或下载 DLL。
 2. 从托盘菜单打开「设置」，填入自己的 DeepSeek API 密钥。默认截图快捷键为 `Alt+Q`。
 3. 用快捷键框选题目，等待回答。按 `Esc` 或右键可以取消截图。
+
+需要一次下载源码和 EXE，可以在仓库首页选择 **Code → Download ZIP**。历史版本见 [Releases](https://github.com/Wizard0721/PictureProblem/releases)。
 
 设置中可以保存自己的处理模式和提示词，也可以分别启用联网搜索和截图语音输入。启用语音输入后，可在框选期间说出本题要求，说完再松开鼠标。启用思考模式后，回答窗口会单独显示 DeepSeek 返回的思考过程。
 

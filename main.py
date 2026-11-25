@@ -12,7 +12,7 @@ from api import ApiError, prompt_for, stream_chat, transcribe_audio
 from overlay import SnipOverlay
 from result_window import ResultWindow
 from settings_dialog import SettingsDialog
-from voice_input import speech_wav
+from voice_input import Recording, speech_wav
 
 
 class HotkeyBridge(QObject):
@@ -285,7 +285,26 @@ class App(QObject):
         self.qt_app.quit()
 
 
+def _self_test():
+    """验证打包后的 Qt、公式字体和语音依赖，无需密钥或联网。"""
+    import os
+
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"
+    app = QApplication([sys.argv[0]])
+    window = ResultWindow()
+    window.begin("启动自检")
+    window.start_turn(None)
+    window.append_chunk(r"公式测试：\(\frac{1}{2}\)")
+    window.finish()
+    app.processEvents()
+    has_formula = "formula:/" in window.browser.document().toMarkdown()
+    silent_wav = speech_wav(Recording(bytes(32000), 16000, 1, "h"))
+    return 0 if has_formula and silent_wav is None else 1
+
+
 def main():
+    if sys.argv[1:] == ["--self-test"]:
+        sys.exit(_self_test())
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)  # 关掉所有窗口后仍驻留托盘
     app.setWindowIcon(make_tray_icon())   # 所有窗口统一图标，含标题栏左上角

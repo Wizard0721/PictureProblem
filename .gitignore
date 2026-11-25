@@ -1,3 +1,4 @@
+# Git 忽略本机配置及构建文件；Windows EXE 在 GitHub Releases 单独发布。
 /config.json
 *.exe
 *.exe.previous

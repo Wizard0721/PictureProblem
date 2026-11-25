@@ -1,4 +1,4 @@
-"""显示流式 AI 回答，并在当前截图下继续对话。"""
+"""显示流式思考过程、正式回答及本题要求，并提供追问、重试和复制操作。"""
 from dataclasses import dataclass
 import re
 

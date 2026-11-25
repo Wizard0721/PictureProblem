@@ -1,4 +1,4 @@
-"""PyInstaller 使用带 Windows 预编译版本的 WebRTC VAD 包元数据。"""
+"""为 PyInstaller 收录 webrtcvad-wheels 的包元数据，以便人声检测模块加载。"""
 from PyInstaller.utils.hooks import copy_metadata
 
 datas = copy_metadata("webrtcvad-wheels")

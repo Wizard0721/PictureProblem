@@ -2,7 +2,7 @@
 import sys
 
 import keyboard
-from PySide6.QtCore import QObject, QThread, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QCursor, QFont, QIcon, QPainter, QPixmap, QGuiApplication
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -12,7 +12,7 @@ from api import ApiError, prompt_for, stream_chat, transcribe_audio
 from overlay import SnipOverlay
 from result_window import ResultWindow
 from settings_dialog import SettingsDialog
-from voice_input import Recording, speech_wav
+from voice_input import CaptureError, MicrophoneCapture, Recording, _mono_16k, speech_wav
 
 
 class HotkeyBridge(QObject):
@@ -285,8 +285,8 @@ class App(QObject):
         self.qt_app.quit()
 
 
-def _self_test():
-    """验证打包后的 Qt、公式字体和语音依赖，无需密钥或联网。"""
+def _self_test(check_microphone=False):
+    """验证打包后的 Qt、公式和音频采集；自检不上传音频。"""
     import os
 
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
@@ -296,15 +296,33 @@ def _self_test():
     window.start_turn(None)
     window.append_chunk(r"公式测试：\(\frac{1}{2}\)")
     window.finish()
-    app.processEvents()
     has_formula = "formula:/" in window.browser.document().toMarkdown()
     silent_wav = speech_wav(Recording(bytes(32000), 16000, 1, "h"))
-    return 0 if has_formula and silent_wav is None else 1
+    ok = has_formula and silent_wav is None
+    window.deleteLater()
+    microphone = None
+    if check_microphone:
+        microphone = MicrophoneCapture(app)
+        microphone.start()
+    QTimer.singleShot(800 if microphone else 200, app.quit)
+    app.exec()
+    if microphone:
+        try:
+            recording = microphone.finish()
+        except CaptureError:
+            ok = False
+        else:
+            # 16 kHz、16 位单声道：至少收到 200 毫秒音频。
+            ok = ok and len(_mono_16k(recording)) >= 6400
+        microphone.deleteLater()
+    app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    app.shutdown()
+    return 0 if ok else 1
 
 
 def main():
-    if sys.argv[1:] == ["--self-test"]:
-        sys.exit(_self_test())
+    if sys.argv[1:] in (["--self-test"], ["--self-test", "--microphone"]):
+        sys.exit(_self_test(check_microphone="--microphone" in sys.argv[1:]))
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)  # 关掉所有窗口后仍驻留托盘
     app.setWindowIcon(make_tray_icon())   # 所有窗口统一图标，含标题栏左上角

@@ -8,7 +8,12 @@ import wave
 
 import webrtcvad
 from PySide6.QtCore import QObject, QTimer, Signal
-from PySide6.QtMultimedia import QAudio, QAudioFormat, QAudioSource, QMediaDevices
+from PySide6.QtMultimedia import QAudioFormat, QAudioSource, QMediaDevices
+
+try:
+    from PySide6.QtMultimedia import QtAudio
+except ImportError:  # 旧版 PySide6 还使用 QAudio 名称。
+    from PySide6.QtMultimedia import QAudio as QtAudio
 
 
 MAX_SECONDS = 30
@@ -34,15 +39,18 @@ class Recording:
     sample_type: str
 
 
-def _capture_format(device):
-    pcm = QAudioFormat()
-    pcm.setChannelCount(1)
-    pcm.setSampleFormat(QAudioFormat.SampleFormat.Int16)
-    for rate in (_RATE, 48000):
+def _capture_formats(device):
+    # 先用 Windows 为该设备选定的格式，再尝试常见的单声道格式。
+    preferred = device.preferredFormat()
+    if preferred.isValid() and preferred.sampleFormat() in _FORMATS:
+        yield preferred
+    for rate in (48000, _RATE):
+        pcm = QAudioFormat()
+        pcm.setChannelCount(1)
         pcm.setSampleRate(rate)
-        if device.isFormatSupported(pcm):
-            return pcm
-    return device.preferredFormat()
+        pcm.setSampleFormat(QAudioFormat.SampleFormat.Int16)
+        if pcm != preferred and device.isFormatSupported(pcm):
+            yield pcm
 
 
 class MicrophoneCapture(QObject):
@@ -64,35 +72,38 @@ class MicrophoneCapture(QObject):
     def start(self):
         device = QMediaDevices.defaultAudioInput()
         if device.isNull():
-            self._fail("找不到麦克风。请连接麦克风或手动输入本次要求。")
+            self._fail("找不到麦克风。请在 Windows 的声音设置中选择输入设备。")
             return
-        fmt = _capture_format(device)
-        if not fmt.isValid() or fmt.sampleFormat() not in _FORMATS:
-            self._fail("当前麦克风的录音格式不可用。请手动输入本次要求。")
+        for fmt in _capture_formats(device):
+            source = QAudioSource(device, fmt, self)
+            # 交给系统选择缓冲大小，避免过小的缓冲在 Qt 读取前填满。
+            stream = source.start()
+            if stream is None or source.error() != QtAudio.Error.NoError:
+                source.stop()
+                source.deleteLater()
+                continue
+            self._format = fmt
+            self._limit = fmt.bytesForDuration(MAX_SECONDS * 1_000_000)
+            self._source, self._device = source, stream
+            source.stateChanged.connect(self._state_changed)
+            stream.readyRead.connect(self._read)
+            self._read()
+            self._timer.start(MAX_SECONDS * 1000)
+            self.status_changed.emit("正在听 · 可以先说，再框选")
             return
-        self._format = fmt
-        self._limit = fmt.bytesForDuration(MAX_SECONDS * 1_000_000)
-        self._source = QAudioSource(device, fmt, self)
-        self._source.setBufferSize(fmt.bytesForDuration(60_000))
-        self._source.stateChanged.connect(self._state_changed)
-        self._device = self._source.start()
-        if self._device is None or self._source.error() != QAudio.Error.NoError:
-            self._fail("无法开始录音。请检查 Windows 的麦克风权限或手动输入本次要求。")
-            return
-        self._device.readyRead.connect(self._read)
-        self._read()
-        self._timer.start(MAX_SECONDS * 1000)
-        self.status_changed.emit("正在听 · 可以先说，再框选")
+        self._fail("无法打开麦克风。请在 Windows 的声音与隐私设置中检查默认输入设备和麦克风权限。")
 
     def _read(self):
         if self._device is not None:
             data = bytes(self._device.readAll())
             self._pcm.extend(data[:max(0, self._limit - len(self._pcm))])
 
-    def _state_changed(self, state):
-        if state == QAudio.State.StoppedState and self._device is not None:
-            if self._source.error() != QAudio.Error.NoError:
-                self._fail("麦克风录音中断。请检查设备或手动输入本次要求。")
+    def _state_changed(self):
+        # Qt 6.12 的信号还用旧枚举名声明，直接读取当前状态可避开转换错误。
+        source = self._source
+        if (source is not None and source.state() == QtAudio.State.StoppedState
+                and source.error() != QtAudio.Error.NoError):
+            self._fail("麦克风录音中断。请检查默认输入设备是否仍然连接。")
 
     def _fail(self, message):
         self._error = message
@@ -118,10 +129,11 @@ class MicrophoneCapture(QObject):
         self._stop(keep=True)
         if self._error:
             raise CaptureError(self._error)
-        if not self._pcm:
-            return None
         fmt = self._format
-        result = Recording(bytes(self._pcm), fmt.sampleRate(), fmt.channelCount(),
+        if fmt is None or len(self._pcm) < fmt.bytesPerFrame():
+            raise CaptureError("没有收到麦克风音频。请在下次截图时等到「正在听」，说完再松开鼠标。")
+        complete = len(self._pcm) // fmt.bytesPerFrame() * fmt.bytesPerFrame()
+        result = Recording(bytes(memoryview(self._pcm)[:complete]), fmt.sampleRate(), fmt.channelCount(),
                            _FORMATS[fmt.sampleFormat()])
         self._pcm.clear()
         return result

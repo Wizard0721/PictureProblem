@@ -18,13 +18,15 @@ from PySide6.QtWidgets import (
 
 import autostart
 import config
+from hotkey import HotkeyError
 
 
 class SettingsDialog(QDialog):
     saved = Signal(dict)
 
-    def __init__(self, cfg, parent=None):
+    def __init__(self, cfg, bind_hotkey, parent=None):
         super().__init__(parent)
+        self._bind_hotkey = bind_hotkey
         self.setWindowTitle("设置")
         self.setMinimumWidth(480)
         self._custom_modes = {mode["id"]: dict(mode) for mode in cfg.get("custom_modes", [])}
@@ -183,17 +185,6 @@ class SettingsDialog(QDialog):
             modes.append({"id": mode_id, "name": name, "prompt": prompt})
             names.add(name.casefold())
 
-        # 开机自启：只在勾选状态和系统里的实际登记不一致时才动手改
-        want_autostart = self.autostart_check.isChecked()
-        try:
-            if want_autostart != autostart.is_enabled():
-                autostart.set_enabled(want_autostart)
-        except OSError as e:
-            QMessageBox.warning(
-                self, "提示",
-                "开机自启设置失败，其他设置仍会保存。\n错误信息：%s" % e,
-            )
-
         # 在现有配置上更新，避免弄丢其他设置项（如字体大小）
         cfg = config.load()
         cfg.update({
@@ -204,13 +195,27 @@ class SettingsDialog(QDialog):
             "voice_input": self.voice_check.isChecked(),
             "custom_modes": modes,
             "thinking": self.thinking_combo.currentData(),
-            # 以登记后的实际结果为准，避免"保存了但没生效"的假状态
-            "autostart": autostart.is_enabled(),
         })
+        autostart_error = None
         try:
-            config.save(cfg)
+            with self._bind_hotkey(hotkey):
+                want_autostart = self.autostart_check.isChecked()
+                try:
+                    if want_autostart != autostart.is_enabled():
+                        autostart.set_enabled(want_autostart)
+                except OSError as e:
+                    autostart_error = e
+                cfg["autostart"] = autostart.is_enabled()
+                config.save(cfg)
+        except HotkeyError as e:
+            self.hotkey_edit.setFocus()
+            self.hotkey_edit.selectAll()
+            QMessageBox.warning(self, "请检查截图快捷键", str(e))
+            return
         except OSError:
             QMessageBox.warning(self, "设置未保存", "无法写入配置文件，请检查程序目录的写入权限。")
             return
         self.saved.emit(cfg)
+        if autostart_error is not None:
+            QMessageBox.warning(self, "提示", f"其他设置已保存，开机自启设置失败。\n错误信息：{autostart_error}")
         self.accept()

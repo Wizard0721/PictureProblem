@@ -1,7 +1,6 @@
 """程序入口：启动系统托盘，注册截图快捷键，调度录音转写和流式回答。"""
 import sys
 
-import keyboard
 from PySide6.QtCore import QEvent, QObject, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QCursor, QFont, QIcon, QPainter, QPixmap, QGuiApplication
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
@@ -9,15 +8,11 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 import autostart
 import config
 from api import ApiError, prompt_for, stream_chat, transcribe_audio
+from hotkey import GlobalHotkey, HotkeyError
 from overlay import SnipOverlay
 from result_window import ResultWindow
 from settings_dialog import SettingsDialog
 from voice_input import CaptureError, MicrophoneCapture, Recording, _mono_16k, speech_wav
-
-
-class HotkeyBridge(QObject):
-    """keyboard 库的回调发生在它自己的监听线程里，通过信号转回 Qt 主线程。"""
-    triggered = Signal()
 
 
 class AnswerWorker(QThread):
@@ -97,7 +92,6 @@ class App(QObject):
         self.result_window = None
         self.worker = None
         self.settings_dialog = None
-        self._hotkey_handle = None
         self._jpeg = None
         self._prompt = None
         self._initial_instruction = ""
@@ -105,7 +99,7 @@ class App(QObject):
         # 托盘图标和菜单（要先建好，注册快捷键失败时才有地方提示）
         self.tray = QSystemTrayIcon(make_tray_icon())
         self.tray_menu = menu = QMenu()
-        self.snip_action = menu.addAction("截图提问（%s）" % self.cfg["hotkey"], self.start_snip)
+        self.snip_action = menu.addAction("截图提问", self.start_snip)
         self.conversation_action = menu.addAction("查看当前对话", self._show_conversation)
         self.conversation_action.setEnabled(False)
         menu.addAction("设置…", self.open_settings)
@@ -115,10 +109,16 @@ class App(QObject):
         self.tray.setToolTip("截图解题")
         self.tray.show()
 
-        # 快捷键回调 → 主线程信号 → 开始截图
-        self.bridge = HotkeyBridge()
-        self.bridge.triggered.connect(self.start_snip)
-        self.register_hotkey()
+        self.hotkey = GlobalHotkey()
+        self.hotkey.activated.connect(self.start_snip, Qt.ConnectionType.QueuedConnection)
+        qt_app.aboutToQuit.connect(self.hotkey.release)
+        try:
+            with self.hotkey.bind(self.cfg["hotkey"]):
+                pass
+        except HotkeyError as e:
+            self.tray.showMessage("截图解题", str(e), QSystemTrayIcon.Warning, 5000)
+        else:
+            self.snip_action.setText("截图提问（%s）" % self.cfg["hotkey"])
 
         # 第一次使用且还没填密钥时，主动弹出设置窗口
         if not self.cfg.get("api_key"):
@@ -137,26 +137,6 @@ class App(QObject):
                 autostart.set_enabled(True)
             except OSError:
                 pass  # 刷新失败不影响正常使用，下次保存设置时会再尝试
-
-    # ---------- 快捷键 ----------
-
-    def register_hotkey(self):
-        # keyboard 库的 remove_all_hotkeys 在监听器未启动时会崩溃，
-        # 所以改为记录本次注册的句柄，单独移除
-        if self._hotkey_handle is not None:
-            try:
-                keyboard.remove_hotkey(self._hotkey_handle)
-            except (ValueError, KeyError):
-                pass
-            self._hotkey_handle = None
-        try:
-            self._hotkey_handle = keyboard.add_hotkey(
-                self.cfg.get("hotkey", "alt+q"),
-                lambda: self.bridge.triggered.emit(),
-            )
-        except Exception as e:
-            self.tray.showMessage("截图解题", "快捷键注册失败：" + repr(e),
-                                  QSystemTrayIcon.Warning, 5000)
 
     # ---------- 截图 ----------
 
@@ -264,7 +244,7 @@ class App(QObject):
             self.settings_dialog.raise_()
             self.settings_dialog.activateWindow()
             return
-        self.settings_dialog = SettingsDialog(self.cfg)
+        self.settings_dialog = SettingsDialog(self.cfg, self.hotkey.bind)
         self.settings_dialog.saved.connect(self._on_settings_saved)
         self.settings_dialog.finished.connect(lambda _: setattr(self, "settings_dialog", None))
         self.settings_dialog.show()
@@ -272,7 +252,6 @@ class App(QObject):
     def _on_settings_saved(self, cfg):
         self.cfg = cfg
         self.snip_action.setText("截图提问（%s）" % cfg["hotkey"])
-        self.register_hotkey()
 
     def quit(self):
         if self.worker is not None:
@@ -281,7 +260,6 @@ class App(QObject):
             return
         if self.overlay is not None:
             self.overlay.close()
-        keyboard.unhook_all()
         self.qt_app.quit()
 
 

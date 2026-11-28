@@ -9,7 +9,8 @@
 | [README.md](README.md) | 介绍截图解题，说明如何安装、配置 API 密钥、从源码运行和打包。 |
 | [index.md](index.md) | 逐项说明仓库文件及本机生成的文件。 |
 | [.gitignore](.gitignore) | 指定 Git 应忽略的本机配置、缓存、快捷方式和构建产物。 |
-| [main.py](main.py) | 程序入口。启动系统托盘，注册截图快捷键，并调度框选、语音转写和 AI 回答。 |
+| [main.py](main.py) | 程序入口。启动系统托盘，连接截图快捷键，并调度框选、语音转写和 AI 回答。 |
+| [hotkey.py](hotkey.py) | 通过 Windows 原生接口注册、切换和释放全局截图快捷键。 |
 | [overlay.py](overlay.py) | 显示全屏框选层，按显示器缩放比例裁剪截图，并提示录音状态。 |
 | [voice_input.py](voice_input.py) | 在框选期间录制麦克风音频，在本机检测人声，并把有语音的片段转换为 WAV。 |
 | [api.py](api.py) | 调用 DeepSeek 的语音转写、联网搜索和图片问答接口，构建多轮对话请求并读取流式返回。 |

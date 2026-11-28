@@ -6,6 +6,7 @@ from PySide6.QtCore import QEvent, QTimer, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QDesktopServices,
+    QFont,
     QGuiApplication,
     QPalette,
     QTextBlockFormat,
@@ -13,6 +14,8 @@ from PySide6.QtGui import (
     QTextCursor,
     QTextDocument,
     QTextDocumentFragment,
+    QTextFormat,
+    QTextTable,
 )
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -26,6 +29,10 @@ from PySide6.QtWidgets import (
 
 import config
 from math_render import set_math_markdown
+
+
+_ANSWER_TITLE = "AI 回答"
+_CONCLUSION_LEAD = re.compile(r"^(?:最终答案|答案|(?:核查)?结论)\s*[:：](?=\s*\S)")
 
 
 @dataclass(frozen=True)
@@ -294,7 +301,7 @@ class ResultWindow(QWidget):
             if turn.reasoning.strip():
                 yield "思考过程", turn.reasoning, True
             if turn.answer:
-                yield "AI 回答", turn.answer, False
+                yield _ANSWER_TITLE, turn.answer, False
 
     def _render(self, force_bottom=False):
         self._render_timer.stop()
@@ -306,7 +313,9 @@ class ResultWindow(QWidget):
         cursor = QTextCursor(document)
         pixels = round(self._font_size * self.browser.logicalDpiY() / 72)
         color = self.browser.palette().color(QPalette.ColorRole.Text).name()
-        max_width = max(80, self.browser.viewport().width() - 2 * document.documentMargin() - 16)
+        available_width = self.browser.viewport().width() - 2 * document.documentMargin()
+        # 常规宽度留出页边距；宽窗里正文一行约 42 个汉字。
+        answer_gutter = max(14, (available_width - 42 * pixels) / 2)
         thinking_style = self._reasoning_format()
         # 独立解析各段，避免未闭合的 Markdown 影响后面的回答。
         for title, text, is_reasoning in self._sections():
@@ -314,16 +323,21 @@ class ResultWindow(QWidget):
             section.setDefaultFont(document.defaultFont())
             heading = QTextBlockFormat()
             heading.setHeadingLevel(4)
-            heading.setTopMargin(12 if not document.isEmpty() else 0)
+            has_previous = not document.isEmpty()
+            heading.setTopMargin(12 if has_previous else 0)
             heading.setBottomMargin(6)
-            if not document.isEmpty():
+            if has_previous:
                 cursor.insertBlock(heading, QTextCharFormat())
             else:
                 cursor.setBlockFormat(heading)
             formula_color = thinking_style.foreground().color().name() if is_reasoning else color
+            gutter = answer_gutter if title == _ANSWER_TITLE else 0
             set_math_markdown(section, f"#### {title}\n\n{text}", pixels, formula_color,
-                              max_width, resource_document=document)
-            if is_reasoning:
+                              max(80, available_width - gutter * 2 - 16), resource_document=document)
+            if title == _ANSWER_TITLE:
+                self._style_answer(section, pixels, gutter, has_previous)
+                cursor.setBlockFormat(section.begin().blockFormat())
+            elif is_reasoning:
                 first_body_block = section.begin().next()
                 if first_body_block.isValid():
                     style = QTextCursor(first_body_block)
@@ -331,6 +345,82 @@ class ResultWindow(QWidget):
                     style.mergeCharFormat(thinking_style)
             cursor.insertFragment(QTextDocumentFragment(section))
         bar.setValue(bar.maximum() if force_bottom or at_bottom else position)
+
+    def _style_answer(self, section, pixels, gutter, has_previous):
+        space = max(3, round(pixels / 4))
+        palette = self.browser.palette()
+        ink = palette.color(QPalette.ColorRole.Text)
+        link = palette.color(QPalette.ColorRole.Link)
+        conclusion_style = QTextCharFormat()
+        conclusion_style.setForeground(QColor.fromRgbF(*(a * 0.62 + b * 0.38
+                                                        for a, b in zip(ink.getRgbF()[:3], link.getRgbF()[:3]))))
+        conclusion_style.setFontWeight(QFont.Weight.Bold)
+        proportional = QTextBlockFormat.LineHeightTypes.ProportionalHeight.value
+
+        for frame in section.rootFrame().childFrames():
+            if isinstance(frame, QTextTable):
+                table_format = frame.format()
+                table_format.setLeftMargin(gutter)
+                table_format.setRightMargin(gutter)
+                table_format.setTopMargin(space)
+                table_format.setBottomMargin(space)
+                frame.setFormat(table_format)
+
+        block = section.begin()
+        while block.isValid():
+            cursor = QTextCursor(block)
+            text = block.text()
+            if not text.strip() or cursor.currentTable() is not None:
+                block = block.next()
+                continue
+
+            fmt = block.blockFormat()
+            level = fmt.headingLevel()
+            scale = None
+            conclusion = None
+            fmt.setLeftMargin(fmt.leftMargin() + gutter)
+            fmt.setRightMargin(fmt.rightMargin() + gutter)
+            if block == section.begin():
+                fmt.setTopMargin(space * 5 if has_previous else space)
+                fmt.setBottomMargin(space * 2)
+                scale = 1.30
+            elif level:
+                fmt.setTopMargin(space * (4 if level <= 2 else 3))
+                fmt.setBottomMargin(space)
+                scale = 1.18 if level <= 2 else 1.08
+            elif block.textList():
+                fmt.setLineHeight(130, proportional)
+                fmt.setTopMargin(0)
+                fmt.setBottomMargin(space)
+            elif text == "\ufffc":
+                fmt.setTopMargin(space * 3)
+                fmt.setBottomMargin(space * 3)
+            elif not (fmt.nonBreakableLines() or fmt.hasProperty(QTextFormat.Property.BlockCodeLanguage)):
+                fmt.setLineHeight(135, proportional)
+                fmt.setTopMargin(0)
+                fmt.setBottomMargin(space * 2)
+                conclusion = _CONCLUSION_LEAD.match(text)
+                if conclusion:
+                    scale = 1.06
+            cursor.setBlockFormat(fmt)
+
+            if scale:
+                # 保留链接、行内代码等字符格式，也不要改动公式图像的尺寸。
+                parts = [part.fragment() for part in block]
+                for part in parts:
+                    char_format = part.charFormat()
+                    if char_format.isImageFormat():
+                        continue
+                    char_format.clearProperty(QTextFormat.Property.FontSizeAdjustment)
+                    char_format.setFontPointSize(round(self._font_size * scale, 1))
+                    cursor.setPosition(part.position())
+                    cursor.setPosition(part.position() + part.length(), QTextCursor.MoveMode.KeepAnchor)
+                    cursor.setCharFormat(char_format)
+            if conclusion:
+                cursor.setPosition(block.position())
+                cursor.setPosition(block.position() + conclusion.end(), QTextCursor.MoveMode.KeepAnchor)
+                cursor.mergeCharFormat(conclusion_style)
+            block = block.next()
 
     def _reasoning_format(self):
         palette = self.browser.palette()
